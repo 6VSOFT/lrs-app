@@ -15,5 +15,5 @@
     "noUnusedLocals": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests", "shared", "server", "netlify", "vite.config.ts"]
+  "include": ["src", "tests", "shared", "vite.config.ts"]
 }
