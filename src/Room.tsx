@@ -3,8 +3,7 @@ import QRCode from 'qrcode';
 import type { Action } from '@engine/types';
 import { ROLE_NAMES } from '@engine/types';
 import type { PrivateView, PublicView, Todo } from '@engine/views';
-import { act, ApiError } from './lib/api';
-import { useRoom } from './useRoom';
+import { ApiError, ClientSession, HostSession, saveNick, savedNick } from './net';
 import { Shell } from './App';
 import { Btn, Card, Confirm, Pill, SeatPicker, useCountdown } from './ui';
 
@@ -22,33 +21,42 @@ const ROLE_DESC: Record<string, string> = {
 
 type Run = (a: Action) => Promise<void>;
 
-export function Room({ code, uid, onExit }: { code: string; uid: string; onExit: () => void }) {
-  const room = useRoom(code, uid);
+export function Room({ session, onExit }: { session: HostSession | ClientSession; onExit: () => void }) {
+  const [snap, setSnap] = useState(session.snap);
+  useEffect(() => session.subscribe(setSnap), [session]);
   const [toast, setToast] = useState('');
+  const [waited, setWaited] = useState(false);
   const busy = useRef(false);
+  const code = session.code;
+  const online = new Set(snap.online);
   const run: Run = async (a) => {
     if (busy.current) return;
     busy.current = true;
-    try { await act(code, a); } catch (e) { setToast(e instanceof ApiError ? e.message : '操作失败'); }
-    await room.refresh();
+    try { await session.act(a); } catch (e) { setToast(e instanceof ApiError ? e.message : '操作失败'); }
     busy.current = false;
   };
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => { const t = setTimeout(() => setWaited(true), 12000); return () => clearTimeout(t); }, []);
 
-  const { pub, priv } = room;
+  const { pub, priv } = snap;
   let body;
-  if (room.loading && !pub) body = <p className="text-center text-slate-400 mt-20">加载中…</p>;
-  else if (room.notFound || !pub) body = (
-    <Card className="mt-10 text-center space-y-3"><p>找不到房间 {code}</p><Btn onClick={onExit}>返回首页</Btn></Card>
+  if (!pub) body = (
+    <Card className="mt-10 text-center space-y-3">
+      <p className="text-slate-300">{waited ? `连不上房主（房间 ${code}）` : '正在连接房主…'}</p>
+      {waited && <p className="text-sm text-slate-400">请确认房间代码正确，且房主的手机保持打开本页面。</p>}
+      <Btn tone="ghost" onClick={onExit}>返回首页</Btn>
+    </Card>
   );
   else if (!priv) body = pub.phase === 'WAITING_ROOM'
     ? <JoinForm code={code} pub={pub} run={run} onExit={onExit} />
     : <Card className="mt-10 text-center space-y-3"><p>游戏已经开始，你不在这个房间的玩家名单中。</p><Btn onClick={onExit}>返回首页</Btn></Card>;
-  else if (pub.phase === 'WAITING_ROOM') body = <Lobby pub={pub} priv={priv} run={run} online={room.online} onExit={onExit} />;
-  else body = <Game pub={pub} priv={priv} run={run} online={room.online} />;
+  else if (pub.phase === 'WAITING_ROOM') body = <Lobby pub={pub} priv={priv} run={run} online={online} onExit={onExit} />;
+  else body = <Game pub={pub} priv={priv} run={run} online={online} />;
 
   return (
     <Shell>
+      {session.isHost && <div className="mt-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-3 py-2 text-xs text-amber-200">你是房主：游戏数据存在你的手机上，请保持本页面在前台、屏幕常亮，不要关闭。</div>}
+      {!session.isHost && snap.status !== 'connected' && <div className="mt-2 rounded-xl bg-rose-500/20 border border-rose-500/40 px-3 py-2 text-xs text-rose-200">与房主的连接已断开，正在重连…（你的座位会保留）</div>}
       {body}
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-rose-600 text-white px-4 py-2 rounded-xl shadow-lg">{toast}</div>}
     </Shell>
@@ -56,14 +64,14 @@ export function Room({ code, uid, onExit }: { code: string; uid: string; onExit:
 }
 
 function JoinForm({ code, pub, run, onExit }: { code: string; pub: PublicView; run: Run; onExit: () => void }) {
-  const [name, setName] = useState(() => { try { return localStorage.getItem('nick') ?? ''; } catch { return ''; } });
+  const [name, setName] = useState(savedNick);
   return (
     <Card className="mt-10 space-y-3">
       <h2 className="text-xl font-bold">加入房间 {code}</h2>
       <p className="text-slate-400 text-sm">当前 {pub.players.length}/12 人</p>
       <input value={name} maxLength={10} onChange={(e) => setName(e.target.value)} placeholder="你的昵称"
         className="w-full rounded-xl bg-slate-900 border border-slate-600 px-4 py-3 text-lg outline-none" />
-      <Btn disabled={!name.trim() || pub.players.length >= 12} onClick={() => { try { localStorage.setItem('nick', name.trim()); } catch { /* */ } run({ type: 'join', name: name.trim() }); }}>
+      <Btn disabled={!name.trim() || pub.players.length >= 12} onClick={() => { saveNick(name.trim()); run({ type: 'join', name: name.trim() }); }}>
         {pub.players.length >= 12 ? '房间已满' : '加入'}
       </Btn>
       <Btn tone="ghost" onClick={onExit}>返回</Btn>

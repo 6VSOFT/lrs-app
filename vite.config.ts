@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
-  resolve: { alias: { '@engine': fileURLToPath(new URL('./supabase/functions/_shared/engine', import.meta.url)) } },
+  resolve: { alias: { '@engine': fileURLToPath(new URL('./shared/engine', import.meta.url)) } },
   base: './',
   plugins: [
     react(),

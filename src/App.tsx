@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createRoom, ApiError } from './lib/api';
-import { configured, ensureSession } from './lib/supabase';
+import { ApiError, ClientSession, HostSession, hasHostRecord, forgetRoom, saveNick, savedNick } from './net';
 import { Room } from './Room';
 import { Btn, Card } from './ui';
 
@@ -9,51 +8,54 @@ const parseHash = () => {
   return m ? m[1].toUpperCase() : null;
 };
 
-export function App() {
-  const [uid, setUid] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-  const [code, setCode] = useState<string | null>(parseHash());
+type Session = HostSession | ClientSession;
 
-  useEffect(() => {
-    if (!configured) return;
-    ensureSession().then(setUid).catch((e) => setErr(String(e.message ?? e)));
-  }, []);
+export const Shell = ({ children }: { children: React.ReactNode }) => (
+  <div className="mx-auto max-w-md min-h-screen px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
+);
+
+export function App() {
+  const [code, setCode] = useState<string | null>(parseHash());
+  const [session, setSession] = useState<Session | null>(null);
+
   useEffect(() => {
     const f = () => setCode(parseHash());
     window.addEventListener('hashchange', f);
     return () => window.removeEventListener('hashchange', f);
   }, []);
 
-  if (!configured)
-    return (
-      <Shell>
-        <Card>
-          <h1 className="text-xl font-bold mb-2">尚未配置 Supabase</h1>
-          <p className="text-slate-300 text-sm">请复制 .env.example 为 .env.local 并填入 VITE_SUPABASE_URL 与 VITE_SUPABASE_ANON_KEY，详见 README。</p>
-        </Card>
-      </Shell>
-    );
-  if (err) return <Shell><Card><p className="text-rose-400">{err}</p><p className="text-sm text-slate-400 mt-2">请确认 Supabase 已开启匿名登录（Authentication → Sign In / Providers → Anonymous）。</p></Card></Shell>;
-  if (!uid) return <Shell><p className="text-center text-slate-400 mt-20">连接中…</p></Shell>;
-  if (code) return <Room code={code} uid={uid} onExit={() => { location.hash = ''; setCode(null); }} />;
-  return <Home onEnter={(c) => { location.hash = `#/r/${c}`; }} />;
+  // 进入房间链接：本机有房主存档则恢复为房主，否则作为玩家连接房主
+  useEffect(() => {
+    if (!code) { setSession(null); return; }
+    if (session?.code === code) return;
+    session?.destroy();
+    const s: Session = (hasHostRecord(code) ? HostSession.resume(code) : null) ?? new ClientSession(code);
+    setSession(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+  useEffect(() => () => session?.destroy(), [session]);
+
+  const exit = () => { if (session && !session.isHost) forgetRoom(session.code); session?.destroy(); setSession(null); location.hash = ''; };
+
+  if (code && session) return <Room session={session} onExit={exit} />;
+  return (
+    <Home
+      onHost={(s) => { setSession(s); location.hash = `#/r/${s.code}`; }}
+      onJoin={(c) => { location.hash = `#/r/${c}`; }}
+    />
+  );
 }
 
-export const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="mx-auto max-w-md min-h-screen px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">{children}</div>
-);
-
-function Home({ onEnter }: { onEnter: (code: string) => void }) {
-  const [name, setName] = useState(() => { try { return localStorage.getItem('nick') ?? ''; } catch { return ''; } });
+function Home({ onHost, onJoin }: { onHost: (s: HostSession) => void; onJoin: (code: string) => void }) {
+  const [name, setName] = useState(savedNick);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const save = () => { try { localStorage.setItem('nick', name.trim()); } catch { /* ignore */ } };
 
   const create = async () => {
     if (!name.trim()) return setMsg('请先输入昵称');
-    setBusy(true); setMsg(''); save();
-    try { onEnter(await createRoom(name.trim())); }
+    setBusy(true); setMsg(''); saveNick(name.trim());
+    try { onHost(await HostSession.create(name.trim())); }
     catch (e) { setMsg(e instanceof ApiError ? e.message : '创建失败'); }
     setBusy(false);
   };
@@ -70,16 +72,16 @@ function Home({ onEnter }: { onEnter: (code: string) => void }) {
           value={name} maxLength={10} onChange={(e) => setName(e.target.value)} placeholder="例如：小明"
           className="w-full rounded-xl bg-slate-900 border border-slate-600 px-4 py-3 text-lg outline-none focus:border-indigo-400"
         />
-        <Btn onClick={create} disabled={busy}>创建房间</Btn>
+        <Btn onClick={create} disabled={busy}>{busy ? '创建中…' : '创建房间（我的手机当法官）'}</Btn>
         <div className="text-center text-slate-500 text-sm">或加入已有房间</div>
         <input
           value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="输入 6 位房间代码" maxLength={6}
           className="w-full rounded-xl bg-slate-900 border border-slate-600 px-4 py-3 text-lg tracking-widest text-center outline-none focus:border-indigo-400"
         />
-        <Btn tone="ghost" disabled={code.length < 6} onClick={() => { save(); onEnter(code); }}>加入房间</Btn>
+        <Btn tone="ghost" disabled={code.length < 6} onClick={() => { saveNick(name.trim()); onJoin(code); }}>加入房间</Btn>
         {msg && <p className="text-rose-400 text-center">{msg}</p>}
       </Card>
-      <p className="text-xs text-slate-500 text-center mt-6">12 位玩家各用手机加入同一房间。系统自动发牌、主持夜晚、统计投票、判定胜负。</p>
+      <p className="text-xs text-slate-500 text-center mt-6">没有服务器：所有数据保存在各自手机上，玩家手机之间点对点直连。房主的手机负责保管完整状态并运行规则，请全程保持其页面打开。</p>
     </Shell>
   );
 }

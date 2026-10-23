@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateVictory, newRoom } from '../supabase/functions/_shared/engine/engine.ts';
-import { privateView, publicView } from '../supabase/functions/_shared/engine/views.ts';
-import { GameState, Player, Role } from '../supabase/functions/_shared/engine/types.ts';
+import { evaluateVictory, newRoom } from '../shared/engine/engine.ts';
+import { privateView, publicView } from '../shared/engine/views.ts';
+import { GameState, Player, Role } from '../shared/engine/types.ts';
 import {
   act, DEFAULT_ROLES, everyoneVotes, fails, finishSpeech, lobby12, night, seatsOf, seeded, skipSheriff, startGame,
   toFirstDayVote, wolvesKill,

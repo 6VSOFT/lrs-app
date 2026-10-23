@@ -11,9 +11,9 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "baseUrl": ".",
-    "paths": { "@engine/*": ["supabase/functions/_shared/engine/*"] },
+    "paths": { "@engine/*": ["shared/engine/*"] },
     "noUnusedLocals": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests", "supabase/functions/_shared", "vite.config.ts"]
+  "include": ["src", "tests", "shared", "vite.config.ts"]
 }

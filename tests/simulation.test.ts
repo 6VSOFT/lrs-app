@@ -1,31 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { privateView, Todo } from '../supabase/functions/_shared/engine/views.ts';
-import { Action, GameState } from '../supabase/functions/_shared/engine/types.ts';
-import { act, lobby12, seeded, uid } from './helpers.ts';
-
-function botAction(t: Todo, rnd: (n: number) => number): Action {
-  const pick = (xs: number[]) => xs[rnd(xs.length)];
-  switch (t.kind) {
-    case 'ack': return { type: 'ack' };
-    case 'wolf': return { type: 'wolfKill', target: pick(t.options) };
-    case 'seer': return { type: 'seerCheck', target: pick(t.options) };
-    case 'witch': {
-      const r = rnd(4);
-      if (r === 0 && t.canSave) return { type: 'witch', use: 'save' };
-      if (r === 1 && t.canPoison) return { type: 'witch', use: 'poison', target: pick(t.options) };
-      return { type: 'witch', use: 'none' };
-    }
-    case 'register': return { type: 'register', run: rnd(3) === 0 };
-    case 'withdraw': return { type: 'withdraw', withdraw: rnd(3) === 0 };
-    case 'vote': return { type: 'vote', target: rnd(8) === 0 ? 0 : pick(t.options) };
-    case 'call': return { type: 'call', target: rnd(2) ? 0 : pick(t.options) };
-    case 'direction': return { type: 'direction', dir: rnd(2) ? 'cw' : 'ccw' };
-    case 'speech': return { type: 'speechDone' };
-    case 'flip': return { type: 'flip', flip: !!rnd(2) };
-    case 'shoot': return { type: 'shoot', target: rnd(3) === 0 ? 0 : pick(t.options) };
-    case 'handover': return { type: 'handover', target: rnd(3) === 0 ? 0 : pick(t.options) };
-  }
-}
+import { privateView, Todo } from '../shared/engine/views.ts';
+import { GameState } from '../shared/engine/types.ts';
+import { act, botAction, lobby12, seeded, uid } from './helpers.ts';
 
 function playRandomGame(seed: number): GameState {
   const rnd = seeded(seed);

@@ -1,5 +1,6 @@
-import { applyAction, newRoom, setTieRand } from '../supabase/functions/_shared/engine/engine.ts';
-import { Action, GameError, GameState, Role } from '../supabase/functions/_shared/engine/types.ts';
+import { applyAction, newRoom, setTieRand } from '../shared/engine/engine.ts';
+import { Todo } from '../shared/engine/views.ts';
+import { Action, GameError, GameState, Role } from '../shared/engine/types.ts';
 
 export const uid = (seat: number) => `u${seat}`;
 export const DEFAULT_ROLES: Role[] = [
@@ -99,3 +100,28 @@ export function toFirstDayVote(s: GameState = startGame()): GameState {
   s = finishSpeech(s);
   return s;
 }
+
+export function botAction(t: Todo, rnd: (n: number) => number): Action {
+  const pick = (xs: number[]) => xs[rnd(xs.length)];
+  switch (t.kind) {
+    case 'ack': return { type: 'ack' };
+    case 'wolf': return { type: 'wolfKill', target: pick(t.options) };
+    case 'seer': return { type: 'seerCheck', target: pick(t.options) };
+    case 'witch': {
+      const r = rnd(4);
+      if (r === 0 && t.canSave) return { type: 'witch', use: 'save' };
+      if (r === 1 && t.canPoison) return { type: 'witch', use: 'poison', target: pick(t.options) };
+      return { type: 'witch', use: 'none' };
+    }
+    case 'register': return { type: 'register', run: rnd(3) === 0 };
+    case 'withdraw': return { type: 'withdraw', withdraw: rnd(3) === 0 };
+    case 'vote': return { type: 'vote', target: rnd(8) === 0 ? 0 : pick(t.options) };
+    case 'call': return { type: 'call', target: rnd(2) ? 0 : pick(t.options) };
+    case 'direction': return { type: 'direction', dir: rnd(2) ? 'cw' : 'ccw' };
+    case 'speech': return { type: 'speechDone' };
+    case 'flip': return { type: 'flip', flip: !!rnd(2) };
+    case 'shoot': return { type: 'shoot', target: rnd(3) === 0 ? 0 : pick(t.options) };
+    case 'handover': return { type: 'handover', target: rnd(3) === 0 ? 0 : pick(t.options) };
+  }
+}
+
