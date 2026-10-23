@@ -1,0 +1,7 @@
+project_id = "lrs-app"
+
+[auth]
+enable_anonymous_sign_ins = true
+
+[functions.game]
+verify_jwt = true
