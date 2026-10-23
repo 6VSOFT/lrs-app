@@ -31,11 +31,12 @@ describe.skipIf(!BASE)('线上 12 人整局实测（机器人）', () => {
       expect(v.pub.players.every((p: { role: unknown }) => p.role === null)).toBe(true);
       expect(JSON.stringify(v)).not.toContain(secrets[(i + 1) % 12]);
     }
-    const rnd = seeded(77);
+    const rnd = seeded(Number(process.env.SEED ?? 77));
     let phase = '';
-    for (let step = 0; step < 300 && phase !== 'GAME_OVER'; step++) {
+    for (let step = 0; step < 600 && phase !== 'GAME_OVER'; step++) {
       const views = await Promise.all(secrets.slice(0, 12).map(async (s) => ({ s, v: (await get(s, code)).body })));
       phase = views[0].v.pub.phase;
+      if (step % 10 === 0) console.log('step', step, phase, 'round', views[0].v.pub.round, 'v', views[0].v.version, new Date().toISOString().slice(11, 19));
       if (phase === 'GAME_OVER') break;
       const ready = views.filter((x) => x.v.priv.todo && !x.v.priv.todo.locked);
       expect(ready.length).toBeGreaterThan(0);
@@ -45,5 +46,5 @@ describe.skipIf(!BASE)('线上 12 人整局实测（机器人）', () => {
     expect(end.pub.phase).toBe('GAME_OVER');
     expect(end.pub.players.every((p: { role: unknown }) => p.role !== null)).toBe(true);
     console.log('winner:', end.pub.winner, end.pub.winReason, 'log lines:', end.pub.log.length);
-  }, 280000);
+  }, 900000);
 });

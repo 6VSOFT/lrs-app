@@ -47,7 +47,7 @@ function replay(state: GameState | null, code: string, e: Entry): GameState {
 }
 
 /** 读取最新状态：快照 + 补放其后的所有日志 */
-async function load(kv: KV, code: string): Promise<{ state: GameState; seq: number } | null> {
+async function load(kv: KV, code: string): Promise<{ state: GameState; seq: number; snapSeq: number } | null> {
   const snap = await kv.get<Snap>(`${code}/snap`);
   let state: GameState | null = snap?.state ?? null;
   let seq = snap?.seq ?? 0;
@@ -58,8 +58,8 @@ async function load(kv: KV, code: string): Promise<{ state: GameState; seq: numb
     seq += 1;
   }
   if (!state) return null;
-  if (seq > (snap?.seq ?? 0) + 8) await kv.set(`${code}/snap`, { seq, state } satisfies Snap).catch(() => {});
-  return { state, seq };
+  if (seq > (snap?.seq ?? 0) + 2) await kv.set(`${code}/snap`, { seq, state } satisfies Snap).catch(() => {});
+  return { state, seq, snapSeq: snap?.seq ?? 0 };
 }
 
 async function touch(seen: KV, code: string, uid: string): Promise<Record<string, number>> {
@@ -107,12 +107,14 @@ export async function handle(stores: Stores, req: Req): Promise<Res> {
         const cur = await load(kv, code);
         if (!cur) return fail(404, 'NO_ROOM', '房间不存在');
         const entry: Entry = { uid, seed: randomSeed(), ts: Date.now(), action };
-        try { replay(cur.state, code, entry); }
+        let next: GameState;
+        try { next = replay(cur.state, code, entry); }
         catch (e) {
           if (e instanceof GameError) return fail(409, e.code, e.message);
           return fail(500, 'SERVER', '内部错误');
         }
         if (await kv.setIfNew(entryKey(code, cur.seq + 1), entry)) {
+          await kv.set(`${code}/snap`, { seq: cur.seq + 1, state: next } satisfies Snap).catch(() => {}); // 尽力而为：加速后续读取
           return res(200, { ok: true, version: cur.seq + 1 });
         }
         // 槽位已被别人占用：重新读取后在最新状态上再次校验
