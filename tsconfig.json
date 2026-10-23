@@ -11,9 +11,9 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "baseUrl": ".",
-    "paths": { "@engine/*": ["shared/engine/*"] },
+    "paths": { "@engine/*": ["shared/engine/*"], "@shared/*": ["shared/*"] },
     "noUnusedLocals": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests", "shared", "vite.config.ts"]
+  "include": ["src", "tests", "shared", "server", "netlify", "vite.config.ts"]
 }

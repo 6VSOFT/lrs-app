@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HostCore } from '../src/hostcore';
+import { HostCore } from '../shared/hostcore.ts';
 import { Todo } from '../shared/engine/views';
 import { botAction, seeded } from './helpers';
 

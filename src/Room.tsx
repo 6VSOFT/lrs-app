@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import type { Action } from '@engine/types';
 import { ROLE_NAMES } from '@engine/types';
 import type { PrivateView, PublicView, Todo } from '@engine/views';
-import { ApiError, ClientSession, HostSession, saveNick, savedNick } from './net';
+import { ApiError, Session, saveNick, savedNick } from './net';
 import { Shell } from './App';
 import { Btn, Card, Confirm, Pill, SeatPicker, useCountdown } from './ui';
 
@@ -21,7 +21,7 @@ const ROLE_DESC: Record<string, string> = {
 
 type Run = (a: Action) => Promise<void>;
 
-export function Room({ session, onExit }: { session: HostSession | ClientSession; onExit: () => void }) {
+export function Room({ session, onExit }: { session: Session; onExit: () => void }) {
   const [snap, setSnap] = useState(session.snap);
   useEffect(() => session.subscribe(setSnap), [session]);
   const [toast, setToast] = useState('');
@@ -40,10 +40,13 @@ export function Room({ session, onExit }: { session: HostSession | ClientSession
 
   const { pub, priv } = snap;
   let body;
-  if (!pub) body = (
+  if (snap.gone) body = (
+    <Card className="mt-10 text-center space-y-3"><p>找不到房间 {code}，请确认代码是否正确。</p><Btn onClick={onExit}>返回首页</Btn></Card>
+  );
+  else if (!pub) body = (
     <Card className="mt-10 text-center space-y-3">
-      <p className="text-slate-300">{waited ? `连不上房主（房间 ${code}）` : '正在连接房主…'}</p>
-      {waited && <p className="text-sm text-slate-400">请确认房间代码正确，且房主的手机保持打开本页面。</p>}
+      <p className="text-slate-300">{waited ? `连接失败（房间 ${code}）` : '连接中…'}</p>
+      {waited && <p className="text-sm text-slate-400">请检查网络后重试。</p>}
       <Btn tone="ghost" onClick={onExit}>返回首页</Btn>
     </Card>
   );
@@ -55,8 +58,7 @@ export function Room({ session, onExit }: { session: HostSession | ClientSession
 
   return (
     <Shell>
-      {session.isHost && <div className="mt-2 rounded-xl bg-amber-500/20 border border-amber-500/40 px-3 py-2 text-xs text-amber-200">你是房主：游戏数据存在你的手机上，请保持本页面在前台、屏幕常亮，不要关闭。</div>}
-      {!session.isHost && snap.status !== 'connected' && <div className="mt-2 rounded-xl bg-rose-500/20 border border-rose-500/40 px-3 py-2 text-xs text-rose-200">与房主的连接已断开，正在重连…（你的座位会保留）</div>}
+      {snap.status === 'offline' && <div className="mt-2 rounded-xl bg-rose-500/20 border border-rose-500/40 px-3 py-2 text-xs text-rose-200">网络连接中断，正在重连…（你的座位会保留）</div>}
       {body}
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-rose-600 text-white px-4 py-2 rounded-xl shadow-lg">{toast}</div>}
     </Shell>

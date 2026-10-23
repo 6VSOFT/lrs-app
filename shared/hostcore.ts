@@ -1,8 +1,8 @@
 // 房主设备上的「法官」：保管完整状态、校验并执行每个玩家的操作、为每位玩家生成各自可见的视图。
 // 与网络传输完全解耦，便于单元测试。
-import { applyAction, newRoom } from '@engine/engine';
-import { Action, GameError, GameState, Rand } from '@engine/types';
-import { PrivateView, PublicView, privateView, publicView } from '@engine/views';
+import { applyAction, newRoom } from './engine/engine.ts';
+import { Action, GameError, GameState, Rand } from './engine/types.ts';
+import { PrivateView, PublicView, privateView, publicView } from './engine/views.ts';
 
 export interface ViewMsg {
   t: 'view';
