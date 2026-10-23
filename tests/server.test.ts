@@ -59,13 +59,38 @@ describe('可信后端（handler + 条件写入存储）', () => {
     expect(stranger.priv).toBeNull();
   });
 
-  it('后端存储保存全部身份，但只存令牌哈希', async () => {
+  it('后端存储保存全部身份与种子，但只存令牌哈希；日志序号连续无空洞', async () => {
     const st = newStores();
     const code = await lobby(st);
     await post(st, secrets[0], { op: 'act', code, action: { type: 'start' } });
-    const raw = (await st.rooms.get<{ state: { players: { role: string; uid: string }[] } }>(code))!.data.state;
-    expect(raw.players.every((p) => p.role)).toBe(true);
-    expect(raw.players.every((p) => !secrets.includes(p.uid))).toBe(true);
+    const raw = (st.rooms as MemoryKV).raw();
+    const keys = [...raw.keys()].filter((k) => k.startsWith(code + '/e/')).sort();
+    expect(keys.length).toBe(1 + 11 + 12 + 1); // 创建 + 11 加入 + 12 准备 + 开始
+    keys.forEach((k, i) => expect(k.endsWith(String(i + 1).padStart(6, '0'))).toBe(true));
+    expect(JSON.stringify([...raw.values()])).not.toContain(secrets[3]);
+  });
+
+  it('同一槽位被多人同时争抢：只有一个成功，其余在最新状态上重试，不丢不重', async () => {
+    const st = newStores();
+    const code = await lobby(st);
+    await post(st, secrets[0], { op: 'act', code, action: { type: 'start' } });
+    // 12 人同时确认身份 + 每人重复提交 3 次
+    const rs = await Promise.all(secrets.flatMap((s) => [1, 2, 3].map(() => post(st, s, { op: 'act', code, action: { type: 'ack' } }))));
+    expect(rs.filter((r) => r.status === 200).length).toBe(12);
+    expect(rs.filter((r) => r.status === 409).length).toBe(24);
+    const v = (await get(st, secrets[0], code)).body as View;
+    expect(v.pub.phase).toBe('NIGHT');
+  });
+
+  it('快照落后时读取者补放日志，结果与全量重放一致（含随机身份）', async () => {
+    const st = newStores();
+    const code = await lobby(st);
+    await post(st, secrets[0], { op: 'act', code, action: { type: 'start' } });
+    const roles = async () => Promise.all(secrets.map(async (s) => ((await get(st, s, code)).body as { priv: { role: string } }).priv.role));
+    const before = await roles();
+    (st.rooms as MemoryKV).raw().delete(code + '/snap'); // 删除快照 => 从第 1 条日志全量重放
+    expect(await roles()).toEqual(before);
+    expect(before.filter((r) => r === 'wolf').length).toBe(4);
   });
 
   it('12 个机器人经 HTTP 接口并发提交（含重复提交）打完整局', async () => {

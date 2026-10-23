@@ -1,17 +1,18 @@
 import { getStore } from '@netlify/blobs';
-import type { Cond, KV, Stored } from '../../server/handler.ts';
+import type { KV } from '../../server/handler.ts';
 import { handle } from '../../server/handler.ts';
 
 function blobKV(name: string): KV {
   const store = getStore({ name, consistency: 'strong' });
   return {
-    async get<T>(key: string): Promise<Stored<T> | null> {
-      const r = await store.getWithMetadata(key, { type: 'json' });
-      return r ? { data: r.data as T, etag: r.etag as string } : null;
+    async get<T>(key: string): Promise<T | null> {
+      return (await store.get(key, { type: 'json' })) as T | null;
     },
-    async set(key: string, data: unknown, cond?: Cond) {
-      const opts = cond?.isNew ? { onlyIfNew: true } : cond?.match ? { onlyIfMatch: cond.match } : {};
-      const r = await store.setJSON(key, data, opts);
+    async set(key: string, data: unknown) {
+      await store.setJSON(key, data);
+    },
+    async setIfNew(key: string, data: unknown) {
+      const r = await store.setJSON(key, data, { onlyIfNew: true });
       return r.modified;
     },
   };
